@@ -59,39 +59,35 @@ The system also supports **live capture** mode on Linux/macOS (using Scapy's `As
 ---
 
 ## ML Pipeline
-PCAP File
-│
-▼
-NFStream  ──────────────────────► Flow-level DataFrame (bidirectional stats)
-│
-▼
-Scapy (single-pass)  ───────────► Raw packet features
-(TTL, TCP window, RTT, HTTP depth,
-FTP login, response body length)
-│
-▼
-32 Features Extracted
-│
-├── Label Encoding  (proto, service, state)
-└── MinMax Scaling
-│
-▼
-┌─────────────────────────────────────────────┐
-│  Ensemble Classifier                        │
-│  RF + LightGBM + XGBoost → avg probability │
-└──────────────────────┬──────────────────────┘
-│           ┌──────────────────────────┐
-│           │  Isolation Forest        │
-│           │  anomaly score → [0, 1]  │
-│           └────────────┬─────────────┘
-▼                        ▼
-Bayesian Combination  (0.5 × ensemble + 0.5 × IF)
-│
-▼
-Combined Score ≥ Threshold?
-│
-┌────────┴─────────┐
-ATTACK             NORMAL
+1. PCAP File
+      |
+      v
+2. NFStream  -->  Flow-level DataFrame (bidirectional stats)
+      |
+      v
+3. Scapy (single-pass)  -->  Raw packet features
+                              TTL, TCP window, RTT, HTTP depth,
+                              FTP login, response body length
+      |
+      v
+4. 32 Features Extracted
+      |-- Label Encoding (proto, service, state)
+      |-- MinMax Scaling
+      |
+      v
+5. Ensemble Classifier
+      RF + LightGBM + XGBoost  -->  avg attack probability
+      |
+      |        6. Isolation Forest
+      |               anomaly score normalized to [0, 1]
+      |                    |
+      v                    v
+7. Bayesian Combination  (0.5 x ensemble + 0.5 x IF)
+      |
+      v
+8. Combined Score >= Threshold?
+      |-- YES -->  ATTACK
+      |-- NO  -->  NORMAL
 
 ### Features Extracted (32)
 
@@ -101,33 +97,38 @@ ATTACK             NORMAL
 
 ## Project Structure
 netguard-nids/
-│
-├── dashboard.py                         ← Streamlit app (all pages & UI)
-│
-├── pipelines/
-│   ├── feature_extraction.py            ← NFStream + Scapy feature extraction
-│   └── prediction.py                    ← Prediction pipeline + verdict logic
-│
-├── models/
-│   ├── classifiers/
-│   │   ├── final_rf.pkl                 ← Random Forest
-│   │   ├── final_lgbm.pkl               ← LightGBM
-│   │   └── final_xgb.pkl                ← XGBoost
-│   ├── anomaly/
-│   │   └── isolation_forest.pkl
-│   ├── scalers/
-│   │   ├── nidss_scaler.pkl             ← Ensemble scaler
-│   │   └── if_scaler.pkl                ← IF scaler
-│   ├── encoders/
-│   │   └── nidss_encoders.pkl
-│   ├── feature_order/
-│   │   ├── nidss_features.pkl
-│   │   └── if_feature_order.pkl
-│   └── threshold/
-│       └── final_threshold.pkl
-│
-├── requirements.txt
-└── README.md
+|
+|-- dashboard.py               (Streamlit app - all pages and UI)
+|
+|-- pipelines/
+|   |-- feature_extraction.py  (NFStream + Scapy feature extraction)
+|   |-- prediction.py          (Prediction pipeline + verdict logic)
+|
+|-- models/
+|   |-- classifiers/
+|   |   |-- final_rf.pkl       (Random Forest)
+|   |   |-- final_lgbm.pkl     (LightGBM)
+|   |   |-- final_xgb.pkl      (XGBoost)
+|   |
+|   |-- anomaly/
+|   |   |-- isolation_forest.pkl
+|   |
+|   |-- scalers/
+|   |   |-- nidss_scaler.pkl   (Ensemble scaler)
+|   |   |-- if_scaler.pkl      (Isolation Forest scaler)
+|   |
+|   |-- encoders/
+|   |   |-- nidss_encoders.pkl (Label encoders for proto, service, state)
+|   |
+|   |-- feature_order/
+|   |   |-- nidss_features.pkl
+|   |   |-- if_feature_order.pkl
+|   |
+|   |-- threshold/
+|       |-- final_threshold.pkl
+|
+|-- requirements.txt
+|-- README.md
 
 ---
 
