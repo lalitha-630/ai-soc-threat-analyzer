@@ -199,13 +199,14 @@ Place your `.pkl` model files in the `models/` directory following the structure
 
 ### Live Capture Mode
 
-![Live Capture](screenshots/live_capture.png)
+<img width="1920" height="1020" alt="Screenshot 2026-05-28 004717" src="https://github.com/user-attachments/assets/b5a84888-1451-4e28-93eb-3a41005bd16e" />
 
 The Live Network Capture tab lets users start real-time packet recording directly from a network interface. Captured traffic is automatically saved and analyzed when recording stops.
 
 ### Threat Detected — Upload and Analyze Mode
 
-![Threat Detected](screenshots/threat_detected.png)
+<img width="1920" height="1020" alt="Screenshot 2026-05-27 230705" src="https://github.com/user-attachments/assets/52128739-6d45-4a38-afe5-4922c9a2e3d3" />
+
 
 After uploading a PCAP file and clicking Analyze, the dashboard displays the full verdict including threat status, risk level, and the AI-generated analyst note.
 
