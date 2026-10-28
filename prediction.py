@@ -184,16 +184,31 @@ def combine_and_decide(
     peak_flow_index = int(np.argmax(combined_prob)) + 1
     raw_confidence = abs(float(combined_prob.mean()) - float(threshold))
 
+    
     return {
-        'verdict':           verdict,
-        'total_flows':       total_flows,
-        'risk_level':        risk_level,
-        'network_status':    network_status,
-        'threat_intensity':  threat_intensity,
-        'traffic_behavior':  traffic_behavior,
-        'peak_flow_index':   peak_flow_index,
-        'analyst_note':      analyst_note,
-        'all_flow_scores':   combined_prob.round(4).tolist(),
+        'verdict': verdict,
+        'total_flows': total_flows,
+        'risk_level': risk_level,
+        'network_status': network_status,
+        'threat_intensity': threat_intensity,
+        'traffic_behavior': traffic_behavior,
+        'peak_flow_index': peak_flow_index,
+        'analyst_note': analyst_note,
+
+        # Existing combined scores
+        'all_flow_scores': combined_prob.round(4).tolist(),
+
+        # Individual model scores
+        'ensemble_scores': ensemble_prob.round(4).tolist(),
+        'anomaly_scores': if_attack_prob.round(4).tolist(),
+
+        # Individual flow decisions
+        'flow_predictions': final_predictions.astype(int).tolist(),
+        'flagged_flows': int(np.sum(final_predictions == 1)),
+        'normal_flows': int(np.sum(final_predictions == 0)),
+        'detection_threshold': float(threshold),
+
+        # Existing confidence calculation
         'confidence': round(min(raw_confidence * 250, 100), 1)
     }
 
