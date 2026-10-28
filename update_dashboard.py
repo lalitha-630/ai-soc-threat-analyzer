@@ -375,8 +375,8 @@ def render_topbar(status="ready"):
       <div class="ng-logo">
         <div class="ng-logo-icon">🛡️</div>
         <div class="ng-logo-text">
-          <h1>NetGuard AI</h1>
-          <p>Network Threat Intelligence Platform</p>
+          <h1>AI-SOC Threat Analyzer</h1>
+          <p>ML-Based Intrusion Detection with RAG-Powered Threat Investigation</p>
         </div>
       </div>
       <div style="text-align:right">
