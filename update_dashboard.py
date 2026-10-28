@@ -877,23 +877,23 @@ def main():
     elif "ℹ️" in page:
         render_topbar("ready")
         st.markdown('<div class="ng-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="ng-panel-title"><span>🛡️</span> About NetGuard AI</div>',
+        st.markdown('<div class="ng-panel-title"><span>🛡️</span> About AI-SOC Threat Analyzer</div>',
                     unsafe_allow_html=True)
         
         st.markdown("""
         <div class="ng-callout">
-          <b>NetGuard AI</b> is a network intrusion detection system that uses machine learning
+          <b>AI-SOC Threat Analyzer</b> is a network intrusion detection system that uses machine learning
           to automatically detect attacks and anomalies in network traffic.<br><br>
 
-          <b>How the AI works (in plain English):</b><br>
-          Imagine you have a very experienced security guard who has watched millions of security
-          camera recordings. They've seen exactly what normal, everyday activity looks like —
-          and they've also seen every type of break-in attempt. When you hand them a new
-          recording, they can immediately spot anything that "doesn't look right."<br><br>
-          That's exactly what our AI does with network traffic. It was trained on a massive
-          dataset of both normal internet usage and real cyber attacks, so it learned the
-          difference. Now it checks every connection in your network recording and flags
-          anything suspicious.<br><br>
+          <b>Working:</b><br>
+          1\. PCAP File Upload: The user uploads a PCAP file containing captured network traffic for analysis.
+          2\. Feature Extraction: Scapy and NFStream extract packets, network flows, and relevant traffic features.
+          3\. ML-Based Threat Detection: Random Forest, LightGBM, XGBoost, and Isolation Forest analyze traffic patterns to identify potential threats.
+          4\. Alert Generation: The system identifies suspicious flows and generates alerts with relevant detection results and risk indicators.
+          5\. RAG-Based Investigation: RAG retrieves relevant cybersecurity documentation and threat intelligence to provide context for detected threats.
+          6\. LLM-Based Analysis: The LLM uses detection results and retrieved evidence to explain potential threats and recommend mitigation steps.
+           7\. IDS Dashboard: The dashboard displays traffic statistics, threat alerts, supporting evidence, investigation reports, and recommended actions.
+           <br><br>
 
           <b>The 5 AI models working together:</b><br>
           ① <b>XGBoost</b> — Very fast, great at spotting known attack patterns<br>
@@ -934,10 +934,6 @@ def main():
             <div class="ng-callout">
               <code>pip install streamlit plotly nfstream scapy</code><br>
               <code>pip install xgboost lightgbm scikit-learn joblib</code><br><br>
-              For live capture:<br>
-              <code>sudo apt install tcpdump</code> (Linux)<br>
-              <code>brew install tcpdump</code> (macOS)<br><br>
-              Place trained model files in <code>./models/</code>
             </div>
             """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
