@@ -932,12 +932,12 @@ def main():
                         unsafe_allow_html=True)
             st.markdown("""
             <div class="ng-callout">
-              <code>streamlit,
-              requests,
-              nfstream,
-              scapy,
-              numpy,
-              pandas,scikit-learn,xgboost,lightgbm,joblib,plotly</code><br>
+              <code>streamlit , requests,
+                    nfstream ,   scapy,
+                    numpy    , pandas
+                    scikit-learn , xgboost
+                    lightgbm ,  joblib,
+                    plotly</code><br>
              
             </div>
             """, unsafe_allow_html=True)
