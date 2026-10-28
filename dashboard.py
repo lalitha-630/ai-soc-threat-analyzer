@@ -14,7 +14,7 @@ from datetime import datetime
 from scapy.all import AsyncSniffer, wrpcap
 
 st.set_page_config(
-    page_title="NetGuard AI",
+    page_title="AI-SOC Threat Analyzer",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -416,7 +416,7 @@ def plain_english_risk(risk, verdict, note):
                 "suspicious was spotted.")
     else:
         headline = "⚠️ Suspicious activity was detected"
-        body = ("Our AI found patterns in this network traffic that look like they could "
+        body = ("Our ML model found patterns in this network traffic that look like they could "
                 "be an attack — similar to noticing someone trying every door handle in "
                 "a building. This doesn't mean damage has been done, but it's worth "
                 "asking your IT team to take a closer look.")
