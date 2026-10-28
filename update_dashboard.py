@@ -410,16 +410,10 @@ def human_bytes(n):
 def plain_english_risk(risk, verdict, note):
     if verdict == "NORMAL":
         headline = "✅ Your network looks healthy"
-        body = ("Our AI scanned every connection in this file and found no signs of "
-                "hacking, data theft, or unusual activity. Think of it like a security "
-                "guard who watched every person enter and leave a building — nobody "
-                "suspicious was spotted.")
+        body = ("Our ML model scanned every connection in this file and found no signs of threats")
     else:
         headline = "⚠️ Suspicious activity was detected"
-        body = ("Our ML model found patterns in this network traffic that look like they could "
-                "be an attack — similar to noticing someone trying every door handle in "
-                "a building. This doesn't mean damage has been done, but it's worth "
-                "asking your IT team to take a closer look.")
+        body = ("Our ML model found patterns in this network traffic that look like they could be an attack")
     return headline, body
 
 
