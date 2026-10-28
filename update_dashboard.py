@@ -718,52 +718,6 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
             )
 
 
-def render_live_capture_tab():
-    html_panel("🎙️", "Live Network Capture", """
-    <div class="ng-callout">
-      <b>Live capture is not available on the cloud version.</b><br><br>
-      This feature requires direct access to your machine's network interface and
-      administrator privileges — which cloud servers don't support.
-    </div>
-    """)
-
-    st.markdown("""
-    <div style="background:#111827;border:1px solid #1e2d45;border-radius:12px;
-                padding:2rem;text-align:center;margin-top:1rem;">
-      <div style="font-size:3rem;margin-bottom:1rem;">🖥️</div>
-      <div style="font-family:'Space Mono',monospace;font-size:1.1rem;
-                  color:#00d4ff;font-weight:700;margin-bottom:0.5rem;">
-        Run Locally for Live Capture
-      </div>
-      <div style="font-size:0.88rem;color:#94a3b8;line-height:1.8;margin-bottom:1.5rem;">
-        To capture live network traffic, run NetGuard AI on your own machine.<br>
-        It takes less than 2 minutes to set up.
-      </div>
-
-      <div style="background:#0b0f1a;border:1px solid #1e2d45;border-radius:10px;
-                  padding:1.2rem;text-align:left;margin-bottom:1.5rem;max-width:500px;margin-left:auto;margin-right:auto;">
-        <div style="font-family:'Space Mono',monospace;font-size:0.7rem;
-                    color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.8rem;">
-          Setup Instructions
-        </div>
-        <div style="font-family:'Space Mono',monospace;font-size:0.82rem;color:#e2e8f0;line-height:2;">
-          <span style="color:#7c3aed">#</span> 1. Clone the repo<br>
-          <span style="color:#10b981">$</span> git clone https://github.com/yourrepo/netguard<br><br>
-          <span style="color:#7c3aed">#</span> 2. Install dependencies<br>
-          <span style="color:#10b981">$</span> pip install -r requirements.txt<br><br>
-          <span style="color:#7c3aed">#</span> 3. Run with admin privileges<br>
-          <span style="color:#10b981">$</span> sudo streamlit run app.py &nbsp;&nbsp;<span style="color:#475569"># Linux/Mac</span><br>
-          <span style="color:#10b981">$</span> streamlit run app.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#475569"># Windows (as Admin)</span>
-        </div>
-      </div>
-
-      <div style="font-size:0.8rem;color:#475569;">
-        💡 On Windows? Use <b style="color:#e2e8f0">Wireshark</b> to save a .pcap file,
-        then upload it in the <b style="color:#00d4ff">Upload &amp; Analyze</b> tab above.
-      </div>
-    </div>
-    """, unsafe_allow_html=True)
-
 
 
 def main():
@@ -777,7 +731,7 @@ def main():
         """, unsafe_allow_html=True)
 
         page = st.radio(
-            "", ["📁  Upload & Analyze", "🎙️  Live Capture", "ℹ️  About"],
+            "", ["📁  Upload & Analyze", "ℹ️  About"],
             label_visibility="collapsed"
         )
 
