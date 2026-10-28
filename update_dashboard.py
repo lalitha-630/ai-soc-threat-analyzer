@@ -777,7 +777,7 @@ def main():
           <b>What is a PCAP file?</b> It's a recording of network traffic — like a security camera
           recording for your internet connection. You can create one using tools like
           <b>Wireshark</b> (free, Windows/Mac/Linux) or <b>tcpdump</b> (Linux/Mac terminal).
-          Upload it here and our AI will check it for threats in seconds.
+          Upload it here and our ML model will check it for threats in seconds.
         </div>
         """, unsafe_allow_html=True)
 
@@ -932,8 +932,13 @@ def main():
                         unsafe_allow_html=True)
             st.markdown("""
             <div class="ng-callout">
-              <code>pip install streamlit plotly nfstream scapy</code><br>
-              <code>pip install xgboost lightgbm scikit-learn joblib</code><br><br>
+              <code>streamlit,
+              requests,
+              nfstream,
+              scapy,
+              numpy,
+              pandas,scikit-learn,xgboost,lightgbm,joblib,plotly</code><br>
+             
             </div>
             """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
