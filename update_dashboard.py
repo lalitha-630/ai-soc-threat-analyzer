@@ -502,11 +502,18 @@ def mock_raw_df(n):
 
 
 def render_results(result, raw_df, filename="uploaded.pcap"):
-    scores       = np.array(result["all_flow_scores"])
-    n            = result["total_flows"]
-    attack_flows = int(sum(scores >= 0.5))
-    safe_flows   = n - attack_flows
+    scores = np.array(result["all_flow_scores"])
+    n = result["total_flows"]
 
+    # Use predictions from the ML detection pipeline
+    if "flow_predictions" in result:
+        predictions = np.array(result["flow_predictions"])
+        attack_flows = int(np.sum(predictions == 1))
+        safe_flows = int(np.sum(predictions == 0))
+    else:
+        # Fallback for demo results
+        attack_flows = int(np.sum(scores >= 0.5))
+        safe_flows = n - attack_flows
 
     v_cls   = "attack" if result["verdict"] == "ATTACK" else "safe"
     v_icon  = "⚠️"    if result["verdict"] == "ATTACK" else "✅"
