@@ -230,8 +230,8 @@ def run_prediction(raw_df: pd.DataFrame, artifacts: dict) -> dict:
     Output : result dict with verdict, counts, scores
     """
     X_df           = preprocess(raw_df, artifacts)
-    if_attack_prob, _ = run_isolation_forest(X_df, artifacts)
-    ensemble_prob  = run_ensemble(X_df, artifacts)
+   
+    
     result         = combine_and_decide(ensemble_prob, if_attack_prob, artifacts)
     if_attack_prob, _ = run_isolation_forest(X_df, artifacts)
     ensemble_results = run_ensemble(X_df, artifacts)
