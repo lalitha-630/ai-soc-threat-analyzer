@@ -1,240 +1,333 @@
-import pickle
 import joblib
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
+
+# ============================================================
+# Feature configuration
+# ============================================================
 
 ALL_42_FEATURES = [
-    'dur', 'proto', 'service', 'state',
-    'spkts', 'dpkts', 'sbytes', 'dbytes',
-    'rate', 'sttl', 'dttl', 'sload', 'dload',
-    'sloss', 'dloss', 'sinpkt', 'dinpkt',
-    'sjit', 'djit', 'swin', 'stcpb', 'dtcpb',
-    'dwin', 'tcprtt', 'synack', 'ackdat',
-    'smean', 'dmean', 'trans_depth',
-    'response_body_len', 'ct_srv_src',
-    'ct_state_ttl', 'ct_dst_ltm',
-    'ct_src_dport_ltm', 'ct_dst_sport_ltm',
-    'ct_dst_src_ltm', 'is_ftp_login',
-    'ct_ftp_cmd', 'ct_flw_http_mthd',
-    'ct_src_ltm', 'ct_srv_dst', 'is_sm_ips_ports'
+    "dur", "proto", "service", "state", "spkts", "dpkts",
+    "sbytes", "dbytes", "rate", "sttl", "dttl", "sload",
+    "dload", "sloss", "dloss", "sinpkt", "dinpkt", "sjit",
+    "djit", "swin", "stcpb", "dtcpb", "dwin", "tcprtt",
+    "synack", "ackdat", "smean", "dmean", "trans_depth",
+    "response_body_len", "ct_srv_src", "ct_state_ttl",
+    "ct_dst_ltm", "ct_src_dport_ltm", "ct_dst_sport_ltm",
+    "ct_dst_src_ltm", "is_ftp_login", "ct_ftp_cmd",
+    "ct_flw_http_mthd", "ct_src_ltm", "ct_srv_dst",
+    "is_sm_ips_ports",
 ]
 
 TO_FILL_ZERO = [
-    'rate', 'dinpkt', 'sjit', 'djit',
-    'stcpb', 'dtcpb', 'ackdat',
-    'ct_dst_ltm', 'ct_ftp_cmd', 'ct_src_ltm'
+    "trans_depth",
+    "response_body_len",
+    "is_ftp_login",
+    "ct_ftp_cmd",
+    "ct_flw_http_mthd",
 ]
 
 CAT_COLS_FALLBACK = {
-    'proto':   'tcp',
-    'service': '-',
-    'state':   'CON',
+    "proto": "unknown",
+    "service": "-",
+    "state": "unknown",
 }
 
-ENSEMBLE_WEIGHT = 0.5
-IF_WEIGHT       = 0.5
-ATTACK_RATIO_THRESHOLD = 0.3
 
+# ============================================================
+# Artifact loading
+# ============================================================
 
-def load_artifacts(models_dir: str) -> dict:
-    import os
-    p = models_dir
+def load_artifacts(artifacts_dir="models"):
+    """
+    Load trained models and preprocessing artifacts.
 
-    with open(os.path.join(p, 'encoders',      'nidss_encoders.pkl'),   'rb') as f:
-        encoders = pickle.load(f)
-    with open(os.path.join(p, 'scalers',       'nidss_scaler.pkl'),     'rb') as f:
-        scaler = pickle.load(f)
-    with open(os.path.join(p, 'feature_order', 'nidss_features.pkl'),   'rb') as f:
-        nids_features = pickle.load(f)
-    with open(os.path.join(p, 'anomaly',       'isolation_forest.pkl'), 'rb') as f:
-        iso_forest = pickle.load(f)
-    with open(os.path.join(p, 'scalers',       'if_scaler.pkl'),        'rb') as f:
-        if_scaler = pickle.load(f)
-    with open(os.path.join(p, 'feature_order', 'if_feature_order.pkl'), 'rb') as f:
-        if_feature_order = pickle.load(f)
+    Expected artifact files:
+      - xgb_model.pkl
+      - lgbm_model.pkl
+      - rf_model.pkl
+      - isolation_forest.pkl
+      - scaler.pkl
+      - encoders.pkl
+      - threshold.pkl
 
-    model_xgb  = joblib.load(os.path.join(p, 'classifiers', 'final_xgb.pkl'))
-    model_lgbm = joblib.load(os.path.join(p, 'classifiers', 'final_lgbm.pkl'))
-    model_rf   = joblib.load(os.path.join(p, 'classifiers', 'final_rf.pkl'))
-    threshold  = joblib.load(os.path.join(p, 'threshold',   'final_threshold.pkl'))
+    Update these filenames if your project uses different names.
+    """
+    artifacts_dir = Path(artifacts_dir)
 
-    return {
-        'encoders':        encoders,
-        'scaler':          scaler,
-        'nids_features':   nids_features,
-        'iso_forest':      iso_forest,
-        'if_scaler':       if_scaler,
-        'if_feature_order': if_feature_order,
-        'model_xgb':       model_xgb,
-        'model_lgbm':      model_lgbm,
-        'model_rf':        model_rf,
-        'threshold':       threshold,
+    def load_pickle(filename):
+        path = artifacts_dir / filename
+        if not path.exists():
+            raise FileNotFoundError(f"Required model artifact not found: {path}")
+        return joblib.load(path)
+
+    artifacts = {
+        "xgb_model": load_pickle("xgb_model.pkl"),
+        "lgbm_model": load_pickle("lgbm_model.pkl"),
+        "rf_model": load_pickle("rf_model.pkl"),
+        "isolation_forest": load_pickle("isolation_forest.pkl"),
+        "scaler": load_pickle("scaler.pkl"),
+        "encoders": load_pickle("encoders.pkl"),
+        "threshold": load_pickle("threshold.pkl"),
     }
 
+    return artifacts
+
+
+# ============================================================
+# Preprocessing
+# ============================================================
 
 def preprocess(raw_df: pd.DataFrame, artifacts: dict) -> pd.DataFrame:
-    encoders      = artifacts['encoders']
-    scaler        = artifacts['scaler']
-    nids_features = artifacts['nids_features']
+    """
+    Convert extracted raw flow data into the model's expected features.
 
-    extracted_df = raw_df.copy()
+    Keeps the input row order so prediction index i corresponds to
+    raw_df.iloc[i] in the dashboard.
+    """
+    if raw_df is None or raw_df.empty:
+        raise ValueError("No network flows were extracted from the PCAP.")
 
-    for col, fallback in CAT_COLS_FALLBACK.items():
-        known_values = encoders[col].classes_
-        extracted_df[col] = extracted_df[col].apply(
-            lambda x: x if x in known_values else fallback
+    df = raw_df.copy()
+
+    # Add any expected feature missing from the extracted flow data.
+    for col in ALL_42_FEATURES:
+        if col not in df.columns:
+            if col in CAT_COLS_FALLBACK:
+                df[col] = CAT_COLS_FALLBACK[col]
+            else:
+                df[col] = 0
+
+    # Fill missing values in selected features.
+    for col in TO_FILL_ZERO:
+        if col in df.columns:
+            df[col] = df[col].fillna(0)
+
+    # Encode categorical features.
+    encoders = artifacts.get("encoders", {})
+    for col, encoder in encoders.items():
+        if col not in df.columns:
+            continue
+
+        values = df[col].fillna(CAT_COLS_FALLBACK.get(col, "unknown")).astype(str)
+
+        # Handle values not seen during training.
+        known_values = set(getattr(encoder, "classes_", []))
+        if known_values:
+            fallback = CAT_COLS_FALLBACK.get(col, next(iter(known_values)))
+            values = values.map(lambda value: value if value in known_values else fallback)
+
+        df[col] = encoder.transform(values)
+
+    # Select features in the exact expected order.
+    X_df = df[ALL_42_FEATURES].copy()
+
+    # Ensure model input is numeric.
+    X_df = X_df.apply(pd.to_numeric, errors="coerce").fillna(0)
+
+    scaler = artifacts.get("scaler")
+    if scaler is not None:
+        X_scaled = scaler.transform(X_df)
+        X_df = pd.DataFrame(
+            X_scaled,
+            columns=ALL_42_FEATURES,
+            index=X_df.index,
         )
-        extracted_df[col] = encoders[col].transform(extracted_df[col])
-
-    for feature in TO_FILL_ZERO:
-        extracted_df[feature] = 0
-
-    extracted_df = extracted_df[ALL_42_FEATURES]
-    extracted_df = extracted_df.replace([np.inf, -np.inf], 0)
-    extracted_df = extracted_df.fillna(0)
-
-    X_scaled = scaler.transform(extracted_df)
-    X_df     = pd.DataFrame(X_scaled, columns=ALL_42_FEATURES)
-
-    X_df.drop(columns=TO_FILL_ZERO, inplace=True)
-
-    X_df = X_df[nids_features]
 
     return X_df
 
-def run_isolation_forest(X_df: pd.DataFrame, artifacts: dict) -> tuple:
+
+# ============================================================
+# Model score helpers
+# ============================================================
+
+def _positive_class_scores(model, X_df) -> np.ndarray:
     """
-    Run Isolation Forest, flip and normalize scores to attack probability.
-    Returns (if_attack_prob, if_predictions)
+    Return the probability for class 1 when predict_proba is available.
+    Otherwise, convert decision_function scores to a 0..1 range.
     """
-    iso_forest       = artifacts['iso_forest']
-    if_scaler        = artifacts['if_scaler']
-    if_feature_order = artifacts['if_feature_order']
+    if hasattr(model, "predict_proba"):
+        probabilities = model.predict_proba(X_df)
 
-    X_df_if     = X_df[if_feature_order]
-    X_if_scaled = if_scaler.transform(X_df_if)
+        classes = getattr(model, "classes_", None)
+        if classes is not None:
+            positive_indices = np.where(np.asarray(classes) == 1)[0]
+            positive_index = int(positive_indices[0]) if len(positive_indices) else -1
+        else:
+            positive_index = -1
 
-    if_scores      = iso_forest.decision_function(X_if_scaled)
-    if_predictions = iso_forest.predict(X_if_scaled)
+        return np.asarray(probabilities[:, positive_index], dtype=float)
 
-    if_scores_flipped = -if_scores
-    if_min = if_scores_flipped.min()
-    if_max = if_scores_flipped.max()
+    if hasattr(model, "decision_function"):
+        scores = np.asarray(model.decision_function(X_df), dtype=float)
+        return 1.0 / (1.0 + np.exp(-scores))
 
-    if if_max - if_min == 0:
-        if_attack_prob = np.zeros(len(if_scores_flipped))
-    else:
-        if_attack_prob = (if_scores_flipped - if_min) / (if_max - if_min)
+    raise TypeError(
+        f"{type(model).__name__} does not support predict_proba "
+        "or decision_function."
+    )
 
-    return if_attack_prob, if_predictions
+
+# ============================================================
+# Supervised ensemble
+# ============================================================
+
 def run_ensemble(X_df: pd.DataFrame, artifacts: dict) -> dict:
     """
-    Run the three supervised classifiers.
-    Returns each model's attack probability and their average.
-    """
-    prob_xgb = artifacts['model_xgb'].predict_proba(X_df)[:, 1]
-    prob_lgbm = artifacts['model_lgbm'].predict_proba(X_df)[:, 1]
-    prob_rf = artifacts['model_rf'].predict_proba(X_df)[:, 1]
+    Run XGBoost, LightGBM, and Random Forest.
 
-    ensemble_prob = (prob_xgb + prob_lgbm + prob_rf) / 3
+    Returns each model's per-flow score and the mean ensemble score.
+    """
+    xgb_scores = _positive_class_scores(artifacts["xgb_model"], X_df)
+    lgbm_scores = _positive_class_scores(artifacts["lgbm_model"], X_df)
+    rf_scores = _positive_class_scores(artifacts["rf_model"], X_df)
+
+    ensemble_prob = np.mean(
+        np.vstack([xgb_scores, lgbm_scores, rf_scores]),
+        axis=0,
+    )
 
     return {
-        'xgb_scores': prob_xgb,
-        'lgbm_scores': prob_lgbm,
-        'rf_scores': prob_rf,
-        'ensemble_prob': ensemble_prob
+        "xgb_scores": xgb_scores,
+        "lgbm_scores": lgbm_scores,
+        "rf_scores": rf_scores,
+        "ensemble_prob": ensemble_prob,
     }
 
 
+# ============================================================
+# Isolation Forest
+# ============================================================
 
+def run_isolation_forest(X_df: pd.DataFrame, artifacts: dict):
+    """
+    Run Isolation Forest and convert its anomaly scores to 0..1.
+
+    The returned anomaly scores are relative anomaly scores, not
+    calibrated attack probabilities.
+    """
+    model = artifacts["isolation_forest"]
+
+    # Isolation Forest: lower decision_function values are more anomalous.
+    raw_scores = np.asarray(model.decision_function(X_df), dtype=float)
+    anomaly_scores = -raw_scores
+
+    score_min = float(np.min(anomaly_scores))
+    score_max = float(np.max(anomaly_scores))
+
+    if np.isclose(score_min, score_max):
+        normalized_scores = np.zeros_like(anomaly_scores, dtype=float)
+    else:
+        normalized_scores = (
+            (anomaly_scores - score_min) / (score_max - score_min)
+        )
+
+    # sklearn Isolation Forest uses -1 for anomaly and 1 for normal.
+    raw_predictions = np.asarray(model.predict(X_df))
+    anomaly_predictions = (raw_predictions == -1).astype(int)
+
+    return normalized_scores, anomaly_predictions
+
+
+# ============================================================
+# Combined decision
+# ============================================================
 
 def combine_and_decide(
     ensemble_prob: np.ndarray,
     if_attack_prob: np.ndarray,
-    artifacts: dict
+    artifacts: dict,
 ) -> dict:
     """
-    Bayesian combination of ensemble + IF scores.
-    Returns final verdict dict.
+    Combine supervised ensemble scores and Isolation Forest scores.
+
+    The combined score is a weighted score, not a Bayesian probability.
     """
-    threshold = artifacts['threshold']
+    ensemble_prob = np.asarray(ensemble_prob, dtype=float)
+    if_attack_prob = np.asarray(if_attack_prob, dtype=float)
 
-    combined_prob = (ENSEMBLE_WEIGHT * ensemble_prob) + (IF_WEIGHT * if_attack_prob)
+    if len(ensemble_prob) != len(if_attack_prob):
+        raise ValueError("Ensemble and Isolation Forest score counts do not match.")
 
-    final_predictions = (combined_prob >= threshold).astype(int)
+    if len(ensemble_prob) == 0:
+        raise ValueError("No flow scores were produced.")
 
-    total_flows   = len(final_predictions)
+    ensemble_weight = float(artifacts.get("ensemble_weight", 0.5))
+    if_weight = float(artifacts.get("if_weight", 0.5))
 
-    attack_ratio  = int(sum(final_predictions == 1)) / len(final_predictions)
+    total_weight = ensemble_weight + if_weight
+    if total_weight <= 0:
+        raise ValueError("The model weights must sum to a positive value.")
 
-    verdict       = 'ATTACK' if attack_ratio >= ATTACK_RATIO_THRESHOLD else 'NORMAL'
+    ensemble_weight /= total_weight
+    if_weight /= total_weight
 
-    threat_intensity = round(float(combined_prob.mean()) * 100, 1)
+    threshold = float(np.asarray(artifacts["threshold"]).squeeze())
 
-    if verdict == 'NORMAL':
-        if combined_prob.mean() < 0.4:
-            risk_level = 'Low'
-            network_status = 'Safe'
-            traffic_behavior = 'Stable' if combined_prob.std() < 0.2 else 'Unstable'
-            analyst_note = 'Traffic appears normal. No immediate action required.'
-        else:
-            risk_level = 'Medium'
-            network_status = 'Suspicious'
-            traffic_behavior = 'Stable' if combined_prob.std() < 0.2 else 'Unstable'
-            analyst_note = 'Traffic is normal but some flows show elevated scores. Keep monitoring.'
+    all_flow_scores = (
+        ensemble_weight * ensemble_prob
+        + if_weight * if_attack_prob
+    )
+
+    final_predictions = (all_flow_scores >= threshold).astype(int)
+    attack_count = int(np.sum(final_predictions == 1))
+    total_flows = int(len(final_predictions))
+    attack_ratio = attack_count / total_flows
+
+    if attack_count > 0:
+        verdict = "Threat Detected"
     else:
-        risk_level = 'High'
-        network_status = 'Danger'
-        traffic_behavior = 'Erratic'
-        analyst_note = 'High threat intensity detected. Immediate action recommended.'
+        verdict = "No Threat Detected"
 
-    peak_flow_index = int(np.argmax(combined_prob)) + 1
-    raw_confidence = abs(float(combined_prob.mean()) - float(threshold))
-
-    
     return {
-        'verdict': verdict,
-        'total_flows': total_flows,
-        'risk_level': risk_level,
-        'network_status': network_status,
-        'threat_intensity': threat_intensity,
-        'traffic_behavior': traffic_behavior,
-        'peak_flow_index': peak_flow_index,
-        'analyst_note': analyst_note,
-
-        # Existing combined scores
-        'all_flow_scores': combined_prob.round(4).tolist(),
-
-        # Individual model scores
-        'ensemble_scores': ensemble_prob.round(4).tolist(),
-        'anomaly_scores': if_attack_prob.round(4).tolist(),
-
-        # Individual flow decisions
-        'flow_predictions': final_predictions.astype(int).tolist(),
-        'flagged_flows': int(np.sum(final_predictions == 1)),
-        'normal_flows': int(np.sum(final_predictions == 0)),
-        'detection_threshold': float(threshold),
-
-        # Existing confidence calculation
-        'confidence': round(min(raw_confidence * 250, 100), 1)
+        "verdict": verdict,
+        "all_flow_scores": all_flow_scores,
+        "ensemble_scores": ensemble_prob,
+        "anomaly_scores": if_attack_prob,
+        "flow_predictions": final_predictions,
+        "flagged_flows": attack_count,
+        "total_flows": total_flows,
+        "attack_ratio": attack_ratio,
+        "detection_threshold": threshold,
+        "confidence": float(np.max(all_flow_scores)),
     }
 
 
+# ============================================================
+# Full prediction pipeline
+# ============================================================
 
 def run_prediction(raw_df: pd.DataFrame, artifacts: dict) -> dict:
     """
-    Master function.
-    Input  : raw_df from feature_extraction.extract_all_features()
-             artifacts from load_artifacts()
-    Output : result dict with verdict, counts, scores
+    Run preprocessing, all four models, and the combined decision.
+
+    The returned arrays preserve raw_df row order. Therefore,
+    result["flow_predictions"][i] and the score arrays at index i
+    correspond to raw_df.iloc[i].
     """
-    X_df           = preprocess(raw_df, artifacts)
-   
-    
-    result         = combine_and_decide(ensemble_prob, if_attack_prob, artifacts)
-    if_attack_prob, _ = run_isolation_forest(X_df, artifacts)
+    if raw_df is None or raw_df.empty:
+        raise ValueError("No network flows were extracted from the PCAP.")
+
+    X_df = preprocess(raw_df, artifacts)
+
+    if_attack_prob, isolation_predictions = run_isolation_forest(
+        X_df,
+        artifacts,
+    )
+
     ensemble_results = run_ensemble(X_df, artifacts)
-    ensemble_prob = ensemble_results['ensemble_prob']
+
+    result = combine_and_decide(
+        ensemble_results["ensemble_prob"],
+        if_attack_prob,
+        artifacts,
+    )
+
+    result["xgb_scores"] = ensemble_results["xgb_scores"]
+    result["lgbm_scores"] = ensemble_results["lgbm_scores"]
+    result["rf_scores"] = ensemble_results["rf_scores"]
+    result["isolation_predictions"] = isolation_predictions
 
     return result
