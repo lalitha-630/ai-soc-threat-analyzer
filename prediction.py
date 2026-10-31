@@ -128,17 +128,25 @@ def run_isolation_forest(X_df: pd.DataFrame, artifacts: dict) -> tuple:
         if_attack_prob = (if_scores_flipped - if_min) / (if_max - if_min)
 
     return if_attack_prob, if_predictions
-
-
-def run_ensemble(X_df: pd.DataFrame, artifacts: dict) -> np.ndarray:
+def run_ensemble(X_df: pd.DataFrame, artifacts: dict) -> dict:
     """
-    Run RF + LightGBM + XGBoost, return averaged attack probability.
+    Run the three supervised classifiers.
+    Returns each model's attack probability and their average.
     """
-    prob_xgb  = artifacts['model_xgb'].predict_proba(X_df)[:, 1]
+    prob_xgb = artifacts['model_xgb'].predict_proba(X_df)[:, 1]
     prob_lgbm = artifacts['model_lgbm'].predict_proba(X_df)[:, 1]
-    prob_rf   = artifacts['model_rf'].predict_proba(X_df)[:, 1]
+    prob_rf = artifacts['model_rf'].predict_proba(X_df)[:, 1]
 
-    return (prob_xgb + prob_lgbm + prob_rf) / 3
+    ensemble_prob = (prob_xgb + prob_lgbm + prob_rf) / 3
+
+    return {
+        'xgb_scores': prob_xgb,
+        'lgbm_scores': prob_lgbm,
+        'rf_scores': prob_rf,
+        'ensemble_prob': ensemble_prob
+    }
+
+
 
 
 def combine_and_decide(
@@ -225,5 +233,8 @@ def run_prediction(raw_df: pd.DataFrame, artifacts: dict) -> dict:
     if_attack_prob, _ = run_isolation_forest(X_df, artifacts)
     ensemble_prob  = run_ensemble(X_df, artifacts)
     result         = combine_and_decide(ensemble_prob, if_attack_prob, artifacts)
+    if_attack_prob, _ = run_isolation_forest(X_df, artifacts)
+    ensemble_results = run_ensemble(X_df, artifacts)
+    ensemble_prob = ensemble_results['ensemble_prob']
 
     return result
