@@ -375,8 +375,8 @@ def render_topbar(status="ready"):
       <div class="ng-logo">
         <div class="ng-logo-icon">🛡️</div>
         <div class="ng-logo-text">
-          <h1>AI-SOC Threat Analyzer</h1>
-          <p>ML-Based Intrusion Detection with RAG-Powered Threat Investigation</p>
+          <h1>NetGuard AI</h1>
+          <p>Network Threat Intelligence Platform</p>
         </div>
       </div>
       <div style="text-align:right">
@@ -410,10 +410,16 @@ def human_bytes(n):
 def plain_english_risk(risk, verdict, note):
     if verdict == "NORMAL":
         headline = "✅ Your network looks healthy"
-        body = ("Our ML model scanned every connection in this file and found no signs of threats")
+        body = ("Our AI scanned every connection in this file and found no signs of "
+                "hacking, data theft, or unusual activity. Think of it like a security "
+                "guard who watched every person enter and leave a building — nobody "
+                "suspicious was spotted.")
     else:
         headline = "⚠️ Suspicious activity was detected"
-        body = ("Our ML model found patterns in this network traffic that look like they could be an attack")
+        body = ("Our ML model found patterns in this network traffic that look like they could "
+                "be an attack — similar to noticing someone trying every door handle in "
+                "a building. This doesn't mean damage has been done, but it's worth "
+                "asking your IT team to take a closer look.")
     return headline, body
 
 
@@ -502,10 +508,24 @@ def mock_raw_df(n):
 
 
 def render_results(result, raw_df, filename="uploaded.pcap"):
-    scores       = np.array(result["all_flow_scores"])
-    n            = result["total_flows"]
-    attack_flows = int(sum(scores >= 0.5))
-    safe_flows   = n - attack_flows
+    scores = np.asarray(result["all_flow_scores"], dtype=float)
+    n = int(result.get("total_flows", len(scores)))
+    threshold = float(result.get("detection_threshold", 0.5))
+
+    # Prefer the classifier's final predictions; use the model's threshold only
+    # as a compatibility fallback for older prediction outputs.
+    if "flow_predictions" in result:
+        predictions = np.asarray(result["flow_predictions"], dtype=int)
+    else:
+        predictions = (scores >= threshold).astype(int)
+
+    # Keep score/prediction arrays aligned with the number of returned flows.
+    n = min(n, len(scores), len(predictions))
+    scores = scores[:n]
+    predictions = predictions[:n]
+    attack_flows = int(np.sum(predictions == 1))
+    safe_flows = n - attack_flows
+    suspicious_indices = np.flatnonzero(predictions == 1)
 
 
     v_cls   = "attack" if result["verdict"] == "ATTACK" else "safe"
@@ -532,7 +552,7 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
         ("Total Connections", str(n),              "network flows analyzed",               "blue",   "🌐"),
         ("Threat Level",      result["risk_level"], f"{result['threat_intensity']}% intensity",
          "red" if result["risk_level"] == "High" else ("yellow" if result["risk_level"] == "Medium" else "green"), "🎯"),
-        ("Suspicious Flows",  str(attack_flows),   f"{round(attack_flows/n*100,1)}% of traffic",
+        ("Suspicious Flows",  str(attack_flows),   f"{round(attack_flows / n * 100, 1) if n else 0}% of traffic",
          "red" if attack_flows > 0 else "green", "⚠️"),
         ("AI Confidence",     f"{result['confidence']}%", "model certainty",              "purple", "🤖"),
     ]
@@ -542,6 +562,38 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # Suspicious-only evidence table: benign flows are intentionally excluded.
+    with st.container(border=True):
+        panel_title("⚠️", "Suspicious Flow Values")
+        st.caption(
+            f"Showing {attack_flows} suspicious flow(s) only. "
+            "Scores and predictions come from the ML detection pipeline."
+        )
+        if attack_flows == 0:
+            st.success("No suspicious flows detected.")
+        else:
+            suspicious_df = pd.DataFrame({
+                "Flow ID": [f"F-{i + 1:05d}" for i in suspicious_indices],
+                "ML Score": scores[suspicious_indices],
+            })
+
+            if raw_df is not None and len(raw_df) >= n:
+                feature_rows = raw_df.iloc[suspicious_indices].reset_index(drop=True).copy()
+                feature_rows = feature_rows.loc[:, ~feature_rows.columns.duplicated()]
+                # Avoid duplicate labels and keep all available flow-level features.
+                for column in feature_rows.columns:
+                    if column not in suspicious_df.columns:
+                        suspicious_df[column] = feature_rows[column].to_numpy()
+
+            st.dataframe(
+                suspicious_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.caption(
+                "These are flow-level features from the extractor. Raw packet "
+                "headers/payloads are not included in this table."
+            )
 
     col1, col2 = st.columns([1.6, 1])
 
@@ -549,15 +601,15 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
         with st.container(border=True):
             panel_title("📈", "Per-Flow Threat Score")
             x         = list(range(1, n + 1))
-            color_arr = ["#ef4444" if s >= 0.5 else "#10b981" for s in scores]
+            color_arr = ["#ef4444" if pred == 1 else "#10b981" for pred in predictions]
             fig = go.Figure()
             fig.add_trace(go.Bar(
                 x=x, y=scores.tolist(),
                 marker_color=color_arr,
                 hovertemplate="Flow %{x}<br>Score: %{y:.3f}<extra></extra>",
             ))
-            fig.add_hline(y=0.5, line_dash="dash", line_color="#f59e0b",
-                          annotation_text="Risk Threshold",
+            fig.add_hline(y=threshold, line_dash="dash", line_color="#f59e0b",
+                          annotation_text=f"Risk Threshold ({threshold:.3f})",
                           annotation_font_color="#f59e0b",
                           annotation_font_size=10)
             layout = _plotly_layout(height=280)
@@ -577,7 +629,7 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
                 hovertemplate="%{label}: %{value} flows (%{percent})<extra></extra>",
             ))
             fig2.add_annotation(
-                text=f"{round(safe_flows/n*100)}%<br><span style='font-size:10px'>Safe</span>",
+                text=f"{round(safe_flows / n * 100) if n else 0}%<br><span style='font-size:10px'>Safe</span>",
                 x=0.5, y=0.5, showarrow=False,
                 font=dict(size=16, color="#10b981", family="Space Mono"))
             layout2 = _plotly_layout(height=280)
@@ -718,6 +770,52 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
             )
 
 
+def render_live_capture_tab():
+    html_panel("🎙️", "Live Network Capture", """
+    <div class="ng-callout">
+      <b>Live capture is not available on the cloud version.</b><br><br>
+      This feature requires direct access to your machine's network interface and
+      administrator privileges — which cloud servers don't support.
+    </div>
+    """)
+
+    st.markdown("""
+    <div style="background:#111827;border:1px solid #1e2d45;border-radius:12px;
+                padding:2rem;text-align:center;margin-top:1rem;">
+      <div style="font-size:3rem;margin-bottom:1rem;">🖥️</div>
+      <div style="font-family:'Space Mono',monospace;font-size:1.1rem;
+                  color:#00d4ff;font-weight:700;margin-bottom:0.5rem;">
+        Run Locally for Live Capture
+      </div>
+      <div style="font-size:0.88rem;color:#94a3b8;line-height:1.8;margin-bottom:1.5rem;">
+        To capture live network traffic, run NetGuard AI on your own machine.<br>
+        It takes less than 2 minutes to set up.
+      </div>
+
+      <div style="background:#0b0f1a;border:1px solid #1e2d45;border-radius:10px;
+                  padding:1.2rem;text-align:left;margin-bottom:1.5rem;max-width:500px;margin-left:auto;margin-right:auto;">
+        <div style="font-family:'Space Mono',monospace;font-size:0.7rem;
+                    color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.8rem;">
+          Setup Instructions
+        </div>
+        <div style="font-family:'Space Mono',monospace;font-size:0.82rem;color:#e2e8f0;line-height:2;">
+          <span style="color:#7c3aed">#</span> 1. Clone the repo<br>
+          <span style="color:#10b981">$</span> git clone https://github.com/yourrepo/netguard<br><br>
+          <span style="color:#7c3aed">#</span> 2. Install dependencies<br>
+          <span style="color:#10b981">$</span> pip install -r requirements.txt<br><br>
+          <span style="color:#7c3aed">#</span> 3. Run with admin privileges<br>
+          <span style="color:#10b981">$</span> sudo streamlit run app.py &nbsp;&nbsp;<span style="color:#475569"># Linux/Mac</span><br>
+          <span style="color:#10b981">$</span> streamlit run app.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#475569"># Windows (as Admin)</span>
+        </div>
+      </div>
+
+      <div style="font-size:0.8rem;color:#475569;">
+        💡 On Windows? Use <b style="color:#e2e8f0">Wireshark</b> to save a .pcap file,
+        then upload it in the <b style="color:#00d4ff">Upload &amp; Analyze</b> tab above.
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 
 def main():
@@ -731,7 +829,7 @@ def main():
         """, unsafe_allow_html=True)
 
         page = st.radio(
-            "", ["📁  Upload & Analyze", "ℹ️  About"],
+            "", ["📁  Upload & Analyze", "🎙️  Live Capture", "ℹ️  About"],
             label_visibility="collapsed"
         )
 
@@ -777,7 +875,7 @@ def main():
           <b>What is a PCAP file?</b> It's a recording of network traffic — like a security camera
           recording for your internet connection. You can create one using tools like
           <b>Wireshark</b> (free, Windows/Mac/Linux) or <b>tcpdump</b> (Linux/Mac terminal).
-          Upload it here and our ML model will check it for threats in seconds.
+          Upload it here and our AI will check it for threats in seconds.
         </div>
         """, unsafe_allow_html=True)
 
@@ -877,23 +975,23 @@ def main():
     elif "ℹ️" in page:
         render_topbar("ready")
         st.markdown('<div class="ng-panel">', unsafe_allow_html=True)
-        st.markdown('<div class="ng-panel-title"><span>🛡️</span> About AI-SOC Threat Analyzer</div>',
+        st.markdown('<div class="ng-panel-title"><span>🛡️</span> About NetGuard AI</div>',
                     unsafe_allow_html=True)
         
         st.markdown("""
         <div class="ng-callout">
-          <b>AI-SOC Threat Analyzer</b> is a network intrusion detection system that uses machine learning
+          <b>NetGuard AI</b> is a network intrusion detection system that uses machine learning
           to automatically detect attacks and anomalies in network traffic.<br><br>
 
-          <b>Working:</b><br>
-          1\. PCAP File Upload: The user uploads a PCAP file containing captured network traffic for analysis.
-          2\. Feature Extraction: Scapy and NFStream extract packets, network flows, and relevant traffic features.
-          3\. ML-Based Threat Detection: Random Forest, LightGBM, XGBoost, and Isolation Forest analyze traffic patterns to identify potential threats.
-          4\. Alert Generation: The system identifies suspicious flows and generates alerts with relevant detection results and risk indicators.
-          5\. RAG-Based Investigation: RAG retrieves relevant cybersecurity documentation and threat intelligence to provide context for detected threats.
-          6\. LLM-Based Analysis: The LLM uses detection results and retrieved evidence to explain potential threats and recommend mitigation steps.
-           7\. IDS Dashboard: The dashboard displays traffic statistics, threat alerts, supporting evidence, investigation reports, and recommended actions.
-           <br><br>
+          <b>How the AI works (in plain English):</b><br>
+          Imagine you have a very experienced security guard who has watched millions of security
+          camera recordings. They've seen exactly what normal, everyday activity looks like —
+          and they've also seen every type of break-in attempt. When you hand them a new
+          recording, they can immediately spot anything that "doesn't look right."<br><br>
+          That's exactly what our AI does with network traffic. It was trained on a massive
+          dataset of both normal internet usage and real cyber attacks, so it learned the
+          difference. Now it checks every connection in your network recording and flags
+          anything suspicious.<br><br>
 
           <b>The 5 AI models working together:</b><br>
           ① <b>XGBoost</b> — Very fast, great at spotting known attack patterns<br>
@@ -932,13 +1030,12 @@ def main():
                         unsafe_allow_html=True)
             st.markdown("""
             <div class="ng-callout">
-              <code>streamlit , requests,
-                    nfstream ,   scapy,
-                    numpy    , pandas
-                    scikit-learn , xgboost
-                    lightgbm ,  joblib,
-                    plotly</code><br>
-             
+              <code>pip install streamlit plotly nfstream scapy</code><br>
+              <code>pip install xgboost lightgbm scikit-learn joblib</code><br><br>
+              For live capture:<br>
+              <code>sudo apt install tcpdump</code> (Linux)<br>
+              <code>brew install tcpdump</code> (macOS)<br><br>
+              Place trained model files in <code>./models/</code>
             </div>
             """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
