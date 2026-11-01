@@ -534,7 +534,7 @@ def render_results(result, raw_df, filename="uploaded.pcap"):
          "red" if result["risk_level"] == "High" else ("yellow" if result["risk_level"] == "Medium" else "green"), "🎯"),
         ("Suspicious Flows",  str(attack_flows),   f"{round(attack_flows/n*100,1)}% of traffic",
          "red" if attack_flows > 0 else "green", "⚠️"),
-        ("AI Confidence",     f"{result['confidence']}%", "model certainty",              "purple", "🤖"),
+       
     ]
     for col, (lbl, val, sub, clr, ico) in zip(cols, metric_data):
         with col:
